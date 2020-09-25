@@ -16,6 +16,8 @@ class ExPercentageMatchRule(BaseAggregationRule):
         self.min_denominator = self.rules.get('min_denominator', 0)
         self.total_filter = self.rules['total_filter']
         self.target_filter = self.rules['target_filter']
+        self.auto_buffer_time = self.rules.get('auto_buffer_time', False)
+        self.origin_buffer_time = self.rules['buffer_time']
         self.rules['aggregation_query_element'] = self.generate_aggregation_query()
 
     def get_match_str(self, match):
@@ -56,14 +58,18 @@ class ExPercentageMatchRule(BaseAggregationRule):
             return
         else:
             if total_match_count == 0 or total_match_count < self.min_denominator:
+                if self.auto_buffer_time:
+                    self.rules['buffer_time'] = self.rules['buffer_time'] + self.origin_buffer_time
                 return
             else:
                 match_percentage = (target_match_count * 1.0) / (total_match_count * 1.0) * 100
                 if self.percentage_violation(match_percentage):
-                    match = {self.rules['timestamp_field']: timestamp, 'percentage': match_percentage, 'denominator': total_match_count}
+                    match = {self.rules['timestamp_field']: timestamp, 'percentage': match_percentage, 'denominator': total_match_count, 'buffer_time': self.rules['buffer_time'].minutes}
                     if query_key is not None:
                         match[self.rules['query_key']] = query_key
                     self.add_match(match)
+                if self.auto_buffer_time:
+                    self.rules['buffer_time'] = self.origin_buffer_time
 
     def percentage_violation(self, match_percentage):
         if 'max_percentage' in self.rules and match_percentage > self.rules['max_percentage']:
